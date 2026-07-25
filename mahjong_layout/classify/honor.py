@@ -18,7 +18,6 @@ from PIL import Image
 
 from .constants import (
     HONOR_CHAR_TO_LABEL,
-    HONOR_COLOR_HINTS,
     WHITE_DRAGON_LABEL,
 )
 from .preprocess import prepare
@@ -32,12 +31,19 @@ def decode_honor(
 ) -> TileClassification:
     """Decode an honor tile (wind or dragon) from a crop."""
     prep = prepare(crop, params)
-    fg_ratio = float(np.mean(prep.binary > 0))
 
     # --- 1. white_dragon: nearly blank face WITH a frame --------------------
     # A truly empty crop (no frame, no ink) is NOT a white dragon. Distinguish
     # by checking that the little ink present hugs the border (the tile frame).
-    if fg_ratio < params.honor_fg_ratio_max and _has_border_frame(prep.binary):
+    # We work directly from the raw grayscale of the FULL crop (no face
+    # detection, no inset) — face-detection / inset strips the frame away for
+    # suited tiles, but a white dragon's only marking IS its frame.
+    gray_full = np.asarray(crop.convert("L"), dtype=np.uint8)
+    # Threshold: frame pixels (~40) are much darker than the white face (~245).
+    # Use a simple hard threshold at 100 to isolate dark frame pixels.
+    frame_mask = gray_full < 100
+    fg_ratio_full = float(frame_mask.mean())
+    if fg_ratio_full < params.honor_fg_ratio_max and _has_border_frame_gray(gray_full):
         return TileClassification(
             suit=Suit.HONOR,
             value=None,
@@ -45,7 +51,7 @@ def decode_honor(
             confidence=0.8,
             suit_confidence=suit_confidence,
             method="blank_face",
-            raw={"fg_ratio": round(fg_ratio, 4)},
+            raw={"fg_ratio": round(fg_ratio_full, 4)},
         )
 
     # --- 2. OCR over multiple variants --------------------------------------
@@ -85,8 +91,34 @@ def decode_honor(
         confidence=0.0,
         suit_confidence=suit_confidence,
         method="stub",
-        raw={"ocr_texts": [t for t, _ in ocr_texts], "fg_ratio": round(fg_ratio, 4)},
+        raw={"ocr_texts": [t for t, _ in ocr_texts], "fg_ratio": round(float(np.mean(prep.binary > 0)), 4)},
     )
+
+
+def _has_border_frame_gray(gray: np.ndarray) -> bool:
+    """True if dark pixels concentrate at the border vs the center.
+
+    A white-dragon tile shows a thin dark frame; a truly empty crop has no dark
+    pixels at all; a suited tile's markings sit in the center. This
+    distinguishes them. Works on raw grayscale without pre-processing.
+    """
+    # Isolate dark pixels (the frame)
+    dark = gray < 100
+    h, w = dark.shape
+    if h < 8 or w < 8:
+        return False
+    if not dark.any():
+        return False
+    bw = max(2, w // 8)
+    bh = max(2, h // 8)
+    border = np.concatenate([
+        dark[:bh, :].ravel(), dark[-bh:, :].ravel(),
+        dark[:, :bw].ravel(), dark[:, -bw:].ravel(),
+    ])
+    center = dark[bh:-bh, bw:-bw]
+    if center.size == 0:
+        return False
+    return float(border.mean()) > float(center.mean()) * 2.0
 
 
 def _ocr_honor_variants(crop: Image.Image, params: ClassifyParams):

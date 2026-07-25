@@ -112,7 +112,7 @@ class ClassifyParams:
     suited tiles)."""
 
     # --- honor decoder ---
-    honor_fg_ratio_max: float = 0.06
+    honor_fg_ratio_max: float = 0.20
     """A tile face whose foreground covers less than this fraction is treated
     as the (blank) white dragon."""
 

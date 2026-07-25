@@ -1,0 +1,2 @@
+[console_scripts]
+mahjong-layout = mahjong_layout.cli:main

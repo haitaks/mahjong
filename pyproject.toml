@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mahjong-layout"
+version = "0.1.0"
+description = "Spatial clustering of mahjong tiles into hand/discard/wall zones from YOLO-style detections"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "rosalvak" }]
+dependencies = [
+    "numpy>=1.24",
+    "pillow>=10.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0"]
+ocr = [
+    "rapidocr-onnxruntime>=1.3",
+    "opencv-python>=4.8",
+    # Pin a compatible trio: opencv 5 needs numpy>=2, scipy needs the matching
+    # major; install with `pip install -e .[ocr]` (or the pinned versions).
+    "numpy>=2,<3",
+    "scipy>=1.13",
+]
+
+[project.scripts]
+mahjong-layout = "mahjong_layout.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["mahjong_layout*"]
+exclude = ["tests*"]

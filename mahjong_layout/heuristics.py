@@ -20,15 +20,17 @@ def _hand_score(cluster: Cluster, params: LayoutParams) -> Optional[float]:
 
     A cluster is a hand candidate if:
       * its centroid is in the lower zone (cy > hand_y_min),
-      * it is mostly horizontal (hands are laid flat),
-      * it occupies few rows (hand_max_rows).
+      * it occupies few rows (hand_max_rows),
+      * it is not too large (hand_max_tiles).
+
+    Note: tiles in a hand often stand upright (aspect > 1), so we do NOT
+    gate on dominant_orientation here. Wall vs hand is distinguished by
+    n_rows: the hand sits in 1-2 shallow rows, walls are deeper stacks.
 
     Confidence blends 'how low' with 'how regular'.
     """
     _, cy = cluster.centroid
     if cy < params.hand_y_min:
-        return None
-    if cluster.dominant_orientation != "h":
         return None
     if cluster.n_rows > params.hand_max_rows:
         return None
@@ -76,6 +78,9 @@ def assign_roles(
         hand.role = "hand"
         hand.confidence = hand_score or 0.0
         hand.label = "hand"
+        # Store whether hand tiles stand upright (vertical) — useful downstream
+        # for classification (reading vertical text vs counting horizontal dots)
+        hand.hand_vertical = all(t.aspect > 1.0 for t in hand.tiles)
 
     # --- 2. Wall ----------------------------------------------------------
     for c in clusters:

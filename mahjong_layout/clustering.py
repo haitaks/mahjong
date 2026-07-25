@@ -150,16 +150,34 @@ def _estimate_grid(ys: np.ndarray, xs: np.ndarray, size: float) -> tuple[int, in
 
 
 def _regularity(tiles: list[TileBox], dominant: str) -> float:
-    """How uniform the spacing between tiles is, 0..1.
+    """How uniform the horizontal spacing between tiles is, 0..1.
 
-    Projects tile centers onto the cluster's main axis, sorts them, and
-    measures the coefficient of variation of consecutive gaps. Returns
-    ``1 - cv`` clamped to [0, 1]. Singletons and pairs default to regular.
+    We always measure spacing along the **horizontal (cx)** axis, because
+    any cluster laid out as a row (hand, discard row) is primarily
+    horizontal. The ``dominant`` parameter (whether individual tiles are
+    horizontal or vertical) affects the coordinate used only for wall
+    clusters, which are stacked vertically.
+
+    Projects tile centers onto the x axis, sorts them, and measures the
+    coefficient of variation of consecutive gaps. Returns ``1 - cv``
+    clamped to [0, 1]. Singletons and pairs default to regular.
     """
     if len(tiles) < 3:
         return 1.0
-    coord = np.array([t.cx if dominant == "h" else t.cy for t in tiles])
-    coord.sort()
+    # For wall-like clusters (vertical stacks), measure vertical regularity.
+    # For everything else (hand, discard rows), measure horizontal regularity.
+    if dominant == "v" and len(tiles) >= 4:
+        # Check if this is a genuinely stacked vertical cluster (wall):
+        # tiles stacked vertically will have low y-variance and high x-variance,
+        # the opposite of a row.
+        xs = np.array([t.cx for t in tiles])
+        ys = np.array([t.cy for t in tiles])
+        if ys.std() > xs.std():
+            coord = np.sort(ys)
+        else:
+            coord = np.sort(xs)
+    else:
+        coord = np.sort(np.array([t.cx for t in tiles]))
     gaps = np.diff(coord)
     if gaps.mean() <= 0:
         return 1.0

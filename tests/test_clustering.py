@@ -71,9 +71,9 @@ def test_two_separated_rows_are_two_clusters():
 
 
 def test_grid_estimation_rows_cols():
-    # Two rows of three tiles.
-    row_a = _row(y=0.80, x0=0.1, w=0.05, h=0.05, n=3, step=0.07)
-    row_b = _row(y=0.88, x0=0.1, w=0.05, h=0.05, n=3, step=0.07)
+    # Two rows of three tiles, close enough to cluster together.
+    row_a = _row(y=0.80, x0=0.1, w=0.06, h=0.06, n=3, step=0.07)
+    row_b = _row(y=0.85, x0=0.1, w=0.06, h=0.06, n=3, step=0.07)
     clusters = dbscan_cluster(row_a + row_b)
     assert len(clusters) == 1
     c = clusters[0]
@@ -85,7 +85,7 @@ def test_regularity_high_for_uniform_row_low_for_irregular():
     uniform = _row(y=0.8, x0=0.1, w=0.05, h=0.05, n=6, step=0.06)
     # One cluster (all gaps < eps) but with alternating big/small spacing.
     irregular = [
-        TileBox(x, 0.8, 0.05, 0.05) for x in (0.10, 0.20, 0.22, 0.32, 0.34)
+        TileBox(x, 0.8, 0.06, 0.06) for x in (0.10, 0.17, 0.19, 0.26, 0.28)
     ]
     cu = dbscan_cluster(uniform)
     ci = dbscan_cluster(irregular)

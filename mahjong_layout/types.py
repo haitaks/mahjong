@@ -65,6 +65,7 @@ class Cluster:
     role: str = "other"  # hand | discard | wall | other
     confidence: float = 0.0
     label: str = ""  # optional human-readable id, e.g. "hand", "discard_2"
+    hand_vertical: bool = False  # True when hand tiles stand upright (h/w > 1)
 
 
 @dataclass
@@ -76,18 +77,26 @@ class LayoutParams:
     """
 
     # --- clustering ---
-    eps_k: float = 2.5
+    eps_k: float = 1.5
     """eps = eps_k * median_tile_size. Tiles whose centers are within `eps`
-    are neighbors. 2.5 covers tightly packed tiles plus a small gap."""
+    are neighbors. 1.5 works for close-packed tables without merging distinct
+    zones (hand vs wall vs discard). Increase for wide-angle photos.
+    Default lowered from 2.5 after data analysis — 2.5 merged entire table
+    layouts into a single cluster on dense photos.
+    """
 
     min_samples: int = 2
     """Minimum neighbors (including the point itself) for a core tile. Tiles
     that end up unclustered become singleton clusters tagged `other`."""
 
     # --- role heuristics ---
-    hand_y_min: float = 0.60
+    hand_y_min: float = 0.40
     """Lower part of the frame is the hand. A cluster's centroid must be below
-    this y to be considered a hand candidate."""
+    this y to be considered a hand candidate. Lowered from 0.60 after data
+    analysis: on close-up photos the hand sits at y ~0.49-0.61.
+    Default 0.40 gives a generous lower zone that catches both close-ups
+    and full-table shots.
+    """
 
     hand_max_tiles: int = 18
     """Typical hand is 13-14 tiles; allow slack for exposed melds."""

@@ -29,7 +29,7 @@ def test_upper_scatter_becomes_discard():
 
 def test_vertical_standing_row_is_wall():
     # Standing wall: tall tiles (h >> w), vertical orientation.
-    wall = [TileBox(0.3, 0.1 + i * 0.12, 0.05, 0.10) for i in range(5)]
+    wall = [TileBox(0.3, 0.1 + i * 0.09, 0.06, 0.12) for i in range(5)]
     clusters = dbscan_cluster(wall)
     assign_roles(clusters)
     walls = [c for c in clusters if c.role == "wall"]
@@ -45,9 +45,9 @@ def test_large_lower_cluster_is_not_hand():
 
 
 def test_singleton_far_from_hand_zone_is_other():
-    clusters = dbscan_cluster([TileBox(0.5, 0.5, 0.05, 0.05)])
+    clusters = dbscan_cluster([TileBox(0.5, 0.2, 0.05, 0.05)])
     assign_roles(clusters)
-    # y=0.5 is above hand_y_min (0.6) -> not discard either -> other.
+    # y=0.2 is above hand_y_min (0.4) -> not hand; n=1 < discard_min_tiles -> other.
     assert clusters[0].role == "other"
 
 

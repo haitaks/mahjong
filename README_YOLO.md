@@ -1,48 +1,47 @@
-# Развёртывание YOLO-пайплайна на другой машине
+# Развёртывание пайплайна на другой машине
 
-Этот гайд — для машины с GPU (или мощным CPU), на которой будет
-обучаться YOLO. После обучения веса (model.pt) копируются обратно.
+На этой машине хранятся исходники `mahjong_layout` и тестовые фото.
+На целевой машине (с GPU) запускаются: обучение YOLO + прогон на фото.
 
 ---
 
-## Шаг 1 — перенести проект и датасет
+## Шаг 1 — скопировать проект и датасет на целевую машину
 
 На этой машине (источник):
 
 ```bash
 cd /home/rosalvak/projects/mahjong
 
-# 1. Упаковать датасет
+# Упаковать датасет
 tar czf yolo_dataset.tar.gz yolo/
 
-# 2. Отправить на целевую машину
+# Отправить на целевую машину
 scp yolo_dataset.tar.gz user@target-machine:~/mahjong/
 
-# 3. (Опционально) отправить исходники, если их нет на целевой
-# (на другой ветке / свежий clone)
-git push && ssh user@target-machine "git clone git@github.com:user/mahjong-layout.git ~/mahjong"
+# (Опционально) отправить исходники, если клона репы нет
+scp -r . user@target-machine:~/mahjong/
 ```
 
 На целевой машине:
 
 ```bash
 cd ~/mahjong
-tar xzf yolo_dataset.tar.gz
-# Появится папка yolo/ с train/valid/test/ + data.yaml
+tar xzf yolo_dataset.tar.gz    # появится yolo/ с train/valid/test/ + data.yaml
 ```
 
 ---
 
 ## Шаг 2 — установить зависимости
 
+На целевой машине:
+
 ```bash
-# Базовые — для mahjong_layout (классификация, пайплайн)
-pip install -e .
+cd ~/mahjong
+pip install -e .                     # mahjong_layout (numpy + pillow)
+pip install ultralytics              # YOLO
+pip install opencv-python            # для overlay в run_pipeline.py
 
-# Для YOLO
-pip install ultralytics
-
-# (Опционально) OCR для распознавания wan-иероглифов
+# (Опционально) OCR для wan-иероглифов
 pip install -e ".[ocr]"
 ```
 
@@ -51,52 +50,60 @@ pip install -e ".[ocr]"
 ## Шаг 3 — обучить YOLO
 
 ```bash
-cd ~/mahjong/yolo
+cd ~/mahjong
 
-# YOLOv8n — лёгкая (быстро, ~2-4 часа на среднем GPU)
-python -c "
-from ultralytics import YOLO
-model = YOLO('yolov8n.pt')
-model.train(data='data.yaml', epochs=100, imgsz=640, batch=8, device='cuda')
-"
+# YOLOv8n (быстрая, ~2-4 часа на среднем GPU)
+python scripts/train_yolo.py
 
-# YOLOv8s — точнее, но медленнее
-# model = YOLO('yolov8s.pt')
+# YOLOv8s (точнее, дольше)
+python scripts/train_yolo.py --model yolov8s
+
+# На CPU
+python scripts/train_yolo.py --device cpu --epochs 50 --batch 4
 ```
 
-Параметры под ваше железо:
+Параметры:
 
-| Параметр  | 4 GB VRAM | 6-8 GB VRAM | 12+ GB VRAM | CPU |
-|-----------|-----------|-------------|-------------|-----|
-| batch     | 4         | 8           | 16          | 2   |
-| epochs    | 100       | 100         | 100         | 50  |
-| device    | cuda:0    | cuda:0      | cuda:0      | cpu |
+| Флаг          | Умолч. | Описание                                    |
+|---------------|--------|---------------------------------------------|
+| `--model`     | yolov8n| Вариант: yolov8n/s/m/l/x                    |
+| `--epochs`    | 100    | Эпох обучения                               |
+| `--batch`     | 8      | Размер батча (4 GB VRAM → 4, 8 GB → 8)     |
+| `--device`    | cuda   | `cuda`, `cuda:0`, `cpu`                     |
 
-После обучения веса: `runs/detect/train/weights/best.pt`
+После обучения веса: `yolo/runs/detect/train/weights/best.pt`
 
 ---
 
-## Шаг 4 — скопировать веса обратно
+## Шаг 4 — запустить пайплайн на тестовых фото
 
 ```bash
-scp ~/mahjong/yolo/runs/detect/train/weights/best.pt \
+cd ~/mahjong
+
+# Все фото из tests/*.jpg (авто-ищет yolo/model.pt или yolo/runs/.../best.pt)
+python scripts/run_pipeline.py
+
+# Конкретные фото
+python scripts/run_pipeline.py --photos tests/photo1.jpg tests/photo2.jpg
+
+# Если веса ещё не скопированы в yolo/model.pt — указать путь
+python scripts/run_pipeline.py --weights yolo/runs/detect/train/weights/best.pt
+
+# Только детекция YOLO (без классификации)
+python scripts/run_pipeline.py --no-classify
+```
+
+Результаты: `out/yolo_pipeline/*_pipeline.jpg`
+
+---
+
+## Шаг 5 — (опционально) скопировать веса обратно на эту машину
+
+На целевой:
+
+```bash
+scp yolo/runs/detect/train/weights/best.pt \
   user@this-machine:/home/rosalvak/projects/mahjong/yolo/model.pt
-```
-
----
-
-## Шаг 5 — полный прогон на этой машине
-
-```bash
-cd /home/rosalvak/projects/mahjong
-
-# Активировать venv (если используете)
-source .venv/bin/activate
-
-# Прогнать YOLO -> classify_layout на тестовых фото
-python scripts/yolo_pipeline.py
-
-# Результаты: out/yolo_pipeline/*_yolo_pipeline.jpg
 ```
 
 ---
@@ -105,31 +112,22 @@ python scripts/yolo_pipeline.py
 
 ```
 mahjong/
+├── mahjong_layout/              # Пакет классификации и зонирования (pip install -e .)
 ├── yolo/                        # Датасет (YOLO-формат)
-│   ├── data.yaml                # Конфиг датасета
-│   ├── train/images/            # Тренировочные фото (158 шт)
-│   ├── train/labels/            # YOLO-разметка
-│   ├── valid/images/            # Валидационные фото (50 шт)
-│   ├── valid/labels/            # YOLO-разметка
-│   ├── test/images/             # Тестовые фото (10 шт)
-│   └── test/labels/             # YOLO-разметка
-│   ├── model.pt                 ← Веса YOLO (копировать после обучения)
-│   └── runs/                    ← Результаты обучения (игнорируется git)
-├── mahjong_layout/              # Пакет классификации и зонирования
-│   ├── pipeline.py              # classify_layout() — основной пайплайн
-│   ├── classify/                # Классификатор тайлов
-│   └── types.py                 # TileBox, LayoutResult и т.д.
+│   ├── data.yaml
+│   ├── train/images/            # 158 фото
+│   ├── valid/images/            # 50 фото
+│   ├── test/images/             # 10 фото
+│   ├── model.pt                 ← веса YOLO (после обучения/копирования)
+│   └── runs/                    ← результаты обучения (игнорируется git)
 ├── scripts/
-│   ├── yolo_pipeline.py         # YOLO → classify_layout → overlay
-│   └── viz_classify.py          # Визуализация на valid-выборке
-├── tests/                       # Синтетические тесты + боевые фото
-├── out/                         # Результаты прогонов (игнорируется git)
-├── requirements.txt             # Зависимости для mahjong_layout
+│   ├── train_yolo.py            # Обучение YOLO
+│   └── run_pipeline.py          # YOLO → classify_layout → overlay
+├── tests/*.jpg                  # Боевые фото для теста
 ├── pyproject.toml               # pip install -e .
-├── README.md                    # Документация mahjong_layout
+├── README.md
 └── README_YOLO.md               ← Этот файл
 ```
 
-**Важно:** YOLO детектит все тайлы как один класс (86 классов в Roboflow-датасете,
-но `yolo_pipeline.py` использует только координаты, не class_id).
-Классификацию по мастям (wan/pin/tiao/honor + значение) делает `classify_tile` на кропе.
+**Важно:** YOLO детектит все тайлы (координаты боксов). Классификацию по мастям
+(wan/pin/tiao/honor + значение) делает `classify_tile` на кропе.

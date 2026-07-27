@@ -1,43 +1,30 @@
-"""mahjong_layout — spatial clustering of mahjong tiles into play zones.
+"""mahjong_layout — classify, cluster and zone mahjong tiles.
 
 Public API
 ----------
-- :func:`cluster_layout` — high-level entry point: detections -> LayoutResult.
-- :class:`TileBox`, :class:`Cluster`, :class:`LayoutParams`, :class:`LayoutResult`
+- :func:`classify_layout` — full pipeline: detects → classifies → zones.
+- :class:`TileBox`, :class:`ClassifiedTile`, :class:`LayoutParams`, :class:`LayoutResult`
   — the data types you'll handle.
-- :func:`dbscan_cluster` — the low-level clustering routine.
-- :func:`assign_roles` — the hand/discard/wall/other heuristic.
-
-See ``README.md`` for usage examples and the CLI.
 """
 
-from .types import Cluster, LayoutParams, LayoutResult, TileBox
+from .types import ClassifiedTile, LayoutParams, LayoutResult, TileBox
 
 __all__ = [
     "TileBox",
-    "Cluster",
+    "ClassifiedTile",
     "LayoutParams",
     "LayoutResult",
-    "cluster_layout",
-    "dbscan_cluster",
-    "assign_roles",
+    "classify_layout",
+    "classify_tile",
+    "crop_tile",
 ]
 
 
 def __getattr__(name: str):
-    # Lazy imports to keep import-time cheap and avoid hard deps at import.
-    if name == "cluster_layout":
-        from .pipeline import cluster_layout
+    if name == "classify_layout":
+        from .pipeline import classify_layout
 
-        return cluster_layout
-    if name == "dbscan_cluster":
-        from .clustering import dbscan_cluster
-
-        return dbscan_cluster
-    if name == "assign_roles":
-        from .heuristics import assign_roles
-
-        return assign_roles
+        return classify_layout
     if name == "classify_tile":
         from .classify.classifier import classify_tile
 

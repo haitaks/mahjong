@@ -50,94 +50,79 @@ class TileBox:
 
 
 @dataclass
-class Cluster:
-    """A spatial group of tiles produced by DBSCAN-style clustering."""
+class ClassifiedTile:
+    """A detected tile with its classification result.
 
-    tiles: list[TileBox]
-    centroid: tuple[float, float]
-    bbox: tuple[float, float, float, float]  # xmin, ymin, xmax, ymax (norm)
-    n_tiles: int
-    median_tile_size: float
-    dominant_orientation: str  # 'h' | 'v'
-    n_rows: int
-    n_cols: int
-    regularity: float  # 0..1, 1 = perfectly regular row
-    role: str = "other"  # hand | discard | wall | other
-    confidence: float = 0.0
-    label: str = ""  # optional human-readable id, e.g. "hand", "discard_2"
-    hand_vertical: bool = False  # True when hand tiles stand upright (h/w > 1)
-
-
-@dataclass
-class LayoutParams:
-    """Tunable thresholds for clustering and role assignment.
-
-    All spatial thresholds are in normalized image units and are scaled by the
-    median tile size, so the module adapts to both close-up and wide shots.
+    ``label`` is e.g. "wan5", "pin3", "east", or "unknown" for empty/wall tiles.
+    ``is_empty`` is True when the classifier could not identify the tile
+    (empty tile face, wall tile face, noise).
     """
 
-    # --- clustering ---
-    eps_k: float = 1.5
-    """eps = eps_k * median_tile_size. Tiles whose centers are within `eps`
-    are neighbors. 1.5 works for close-packed tables without merging distinct
-    zones (hand vs wall vs discard). Increase for wide-angle photos.
-    Default lowered from 2.5 after data analysis — 2.5 merged entire table
-    layouts into a single cluster on dense photos.
-    """
-
-    min_samples: int = 2
-    """Minimum neighbors (including the point itself) for a core tile. Tiles
-    that end up unclustered become singleton clusters tagged `other`."""
-
-    # --- role heuristics ---
-    hand_y_min: float = 0.40
-    """Lower part of the frame is the hand. A cluster's centroid must be below
-    this y to be considered a hand candidate. Lowered from 0.60 after data
-    analysis: on close-up photos the hand sits at y ~0.49-0.61.
-    Default 0.40 gives a generous lower zone that catches both close-ups
-    and full-table shots.
-    """
-
-    hand_max_tiles: int = 18
-    """Typical hand is 13-14 tiles; allow slack for exposed melds."""
-
-    discard_min_tiles: int = 2
-    """Clusters with at least this many tiles (after hand/wall assignment) are
-    treated as discards; smaller leftovers stay 'other' as noise."""
-
-    hand_max_rows: int = 3
-    """Hands lie in a few rows; tall stacks are not hands."""
-
-    wall_aspect: float = 1.5
-    """A cluster whose median h/w exceeds this is treated as standing wall
-    tiles."""
-
-    hand_y_weight: float = 0.6
-    hand_reg_weight: float = 0.4
-    """Confidence weighting between 'how low is the cluster' and 'how regular
-    is the row' for picking the hand cluster."""
+    box: TileBox
+    label: str = "unknown"
+    is_empty: bool = True
 
 
 @dataclass
 class LayoutResult:
-    """Output of :func:`mahjong_layout.cluster_layout`."""
+    """Output of :func:`mahjong_layout.classify_layout`.
 
-    clusters: list[Cluster]
-    hand: Optional[Cluster]
-    discards: list[Cluster] = field(default_factory=list)
-    walls: list[Cluster] = field(default_factory=list)
-    others: list[Cluster] = field(default_factory=list)
-    image_size: Optional[tuple[int, int]] = None  # (width, height) in px
+    All tiles are classified first. Then:
+    - Empty tiles are candidates for the wall (unless they belong to the hand).
+    - Non-empty tiles are clustered by proximity.
+    - Clusters in the lower half of the frame → hand.
+    - Clusters in the upper half → discard.
+    - Empty tiles near no meaningful tiles → wall.
+    """
+
+    hand: list[ClassifiedTile]
+    discard: list[ClassifiedTile]
+    wall: list[ClassifiedTile]
+    unknown: list[ClassifiedTile]
 
     def summary(self) -> str:
-        """One-line human summary, e.g. 'hand=14 discard=2c(6) wall=0 other=1'."""
-        n_discard_tiles = sum(c.n_tiles for c in self.discards)
-        n_wall_tiles = sum(c.n_tiles for c in self.walls)
-        n_other_tiles = sum(c.n_tiles for c in self.others)
-        hand_n = self.hand.n_tiles if self.hand else 0
+        """One-line human summary."""
         return (
-            f"hand={hand_n} "
-            f"discard={len(self.discards)}c({n_discard_tiles}) "
-            f"wall={len(self.walls)}c({n_wall_tiles}) "
-            f"other={n_other_tiles}"
+            f"hand={len(self.hand)} "
+            f"discard={len(self.discard)} "
+            f"wall={len(self.wall)} "
+            f"unknown={len(self.unknown)}"
         )
+
+
+@dataclass
+class LayoutParams:
+    """Tunable thresholds for layout detection.
+
+    All spatial thresholds are in normalized image units.
+    """
+
+    # --- classification ---
+    classify_params: Optional[dict] = None
+    """Optional dict forwarded as kwargs to classify_tile(). Uses defaults if None."""
+
+    # --- hand detection by anchor ---
+    hand_eps_k: float = 4.0
+    """Tiles within `hand_eps_k * median_tile_size` of the lowest (max cy)
+    meaningful tile are considered part of the hand. The rest → discard."""
+
+    hand_max_tiles: int = 14
+    """Maximum tiles in a hand (13 + up to 1 winning tile). Increases by 1
+    per exposed meld (kan/pon/chii)."""
+
+    # --- clustering ---
+    eps_k: float = 1.5
+    """eps = eps_k * median_tile_size for the DBSCAN on non-empty tiles."""
+
+    min_samples: int = 2
+    """Minimum neighbors (incl. the point itself) for a core tile."""
+
+    # --- wall ---
+    wall_neighbor_eps: float = 0.08
+    """Max distance (normalized) from an empty tile to the nearest non-empty
+    tile for it to be considered 'nearby' (and therefore NOT wall). Empty tiles
+    with no non-empty neighbour within this radius become wall."""
+
+    wall_min_tiles: int = 3
+    """A contiguous group of empty tiles must have at least this many to be
+    considered a wall; smaller empty groups stay unknown."""

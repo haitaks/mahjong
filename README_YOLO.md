@@ -1,26 +1,34 @@
-# Mahjong YOLO — обучение детекции тайлов
+# Развёртывание YOLO-пайплайна на другой машине
 
-## Что нужно сделать
-
-На другой машине с GPU (или мощным CPU) обучить YOLOv8n детектить тайлы маджонга.
-Готовые веса скопировать обратно на эту машину.
+Этот гайд — для машины с GPU (или мощным CPU), на которой будет
+обучаться YOLO. После обучения веса (model.pt) копируются обратно.
 
 ---
 
-## Шаг 1 — скопировать данные
+## Шаг 1 — перенести проект и датасет
 
-На этой машине:
+На этой машине (источник):
 
 ```bash
-scp /home/rosalvak/projects/mahjong/yolo_dataset.tar.gz user@target-machine:~/mahjong_yolo/
+cd /home/rosalvak/projects/mahjong
+
+# 1. Упаковать датасет
+tar czf yolo_dataset.tar.gz yolo/
+
+# 2. Отправить на целевую машину
+scp yolo_dataset.tar.gz user@target-machine:~/mahjong/
+
+# 3. (Опционально) отправить исходники, если их нет на целевой
+# (на другой ветке / свежий clone)
+git push && ssh user@target-machine "git clone git@github.com:user/mahjong-layout.git ~/mahjong"
 ```
 
 На целевой машине:
 
 ```bash
-cd ~/mahjong_yolo
+cd ~/mahjong
 tar xzf yolo_dataset.tar.gz
-# появится папка yolo/ с train/valid/test/data.yaml
+# Появится папка yolo/ с train/valid/test/ + data.yaml
 ```
 
 ---
@@ -28,73 +36,100 @@ tar xzf yolo_dataset.tar.gz
 ## Шаг 2 — установить зависимости
 
 ```bash
+# Базовые — для mahjong_layout (классификация, пайплайн)
+pip install -e .
+
+# Для YOLO
 pip install ultralytics
-# или:
-# conda install -c conda-forge ultralytics
+
+# (Опционально) OCR для распознавания wan-иероглифов
+pip install -e ".[ocr]"
 ```
 
 ---
 
-## Шаг 3 — обучить
+## Шаг 3 — обучить YOLO
 
 ```bash
-cd ~/mahjong_yolo/yolo
-python -c "from ultralytics import YOLO; model = YOLO('yolov8n.pt'); \
-  model.train(data='data.yaml', epochs=100, imgsz=640, batch=8, device='cuda')"
+cd ~/mahjong/yolo
+
+# YOLOv8n — лёгкая (быстро, ~2-4 часа на среднем GPU)
+python -c "
+from ultralytics import YOLO
+model = YOLO('yolov8n.pt')
+model.train(data='data.yaml', epochs=100, imgsz=640, batch=8, device='cuda')
+"
+
+# YOLOv8s — точнее, но медленнее
+# model = YOLO('yolov8s.pt')
 ```
 
-Параметры:
-- `epochs=100` — норм для детекции одного класса (все тайлы)
-- `batch=8` — подогнать под VRAM (если 4GB → batch=4, если 6GB → batch=8)
-- `device='cuda'` — для GPU. На CPU уберите или `device='cpu'`
-- `imgsz=640` — как в датасете
+Параметры под ваше железо:
 
-После обучения веса будут в `runs/detect/train/weights/best.pt`.
+| Параметр  | 4 GB VRAM | 6-8 GB VRAM | 12+ GB VRAM | CPU |
+|-----------|-----------|-------------|-------------|-----|
+| batch     | 4         | 8           | 16          | 2   |
+| epochs    | 100       | 100         | 100         | 50  |
+| device    | cuda:0    | cuda:0      | cuda:0      | cpu |
+
+После обучения веса: `runs/detect/train/weights/best.pt`
 
 ---
 
 ## Шаг 4 — скопировать веса обратно
 
 ```bash
-scp ~/mahjong_yolo/yolo/runs/detect/train/weights/best.pt \
+scp ~/mahjong/yolo/runs/detect/train/weights/best.pt \
   user@this-machine:/home/rosalvak/projects/mahjong/yolo/model.pt
 ```
 
 ---
 
-## Шаг 5 — запустить полный пайплайн на этой машине
+## Шаг 5 — полный прогон на этой машине
 
 ```bash
 cd /home/rosalvak/projects/mahjong
-python scripts/yolo_pipeline.py
-```
 
-Результаты: `out/yolo_pipeline/*_yolo_pipeline.jpg` — фото с цветными рамками и подписями.
+# Активировать venv (если используете)
+source .venv/bin/activate
+
+# Прогнать YOLO -> classify_layout на тестовых фото
+python scripts/yolo_pipeline.py
+
+# Результаты: out/yolo_pipeline/*_yolo_pipeline.jpg
+```
 
 ---
 
-## Структура проекта (для справки)
+## Структура проекта
 
 ```
 mahjong/
-├── yolo/
-│   ├── model.pt              ← веса YOLO (скопировать после обучения)
-│   ├── data.yaml              ← конфиг датасета
-│   ├── train/images/          ← тренировочные фото
-│   ├── train/labels/          ← YOLO-разметка
-│   ├── valid/images/          ← валидационные фото
-│   └── valid/labels/          ← YOLO-разметка
-├── tests/
-│   ├── photo_*.jpg            ← боевые фото для теста
-├── mahjong_layout/
-│   ├── pipeline.py            ← classify_layout (классификация + кластеризация)
-│   ├── classify/              ← классификатор тайлов
-│   └── types.py               ← TileBox, LayoutResult, etc.
+├── yolo/                        # Датасет (YOLO-формат)
+│   ├── data.yaml                # Конфиг датасета
+│   ├── train/images/            # Тренировочные фото (158 шт)
+│   ├── train/labels/            # YOLO-разметка
+│   ├── valid/images/            # Валидационные фото (50 шт)
+│   ├── valid/labels/            # YOLO-разметка
+│   ├── test/images/             # Тестовые фото (10 шт)
+│   └── test/labels/             # YOLO-разметка
+│   ├── model.pt                 ← Веса YOLO (копировать после обучения)
+│   └── runs/                    ← Результаты обучения (игнорируется git)
+├── mahjong_layout/              # Пакет классификации и зонирования
+│   ├── pipeline.py              # classify_layout() — основной пайплайн
+│   ├── classify/                # Классификатор тайлов
+│   └── types.py                 # TileBox, LayoutResult и т.д.
 ├── scripts/
-│   ├── yolo_pipeline.py       ← YOLO → classify_layout → overlay
-│   └── ...
-└── requirements.txt           ← зависимости для mahjong_layout
+│   ├── yolo_pipeline.py         # YOLO → classify_layout → overlay
+│   └── viz_classify.py          # Визуализация на valid-выборке
+├── tests/                       # Синтетические тесты + боевые фото
+├── out/                         # Результаты прогонов (игнорируется git)
+├── requirements.txt             # Зависимости для mahjong_layout
+├── pyproject.toml               # pip install -e .
+├── README.md                    # Документация mahjong_layout
+└── README_YOLO.md               ← Этот файл
 ```
 
-**Важно:** YOLO детектит **все** тайлы как один класс (class_id без разницы).
-Классификацию (wan/pin/tiao/honor + значение) делает `classify_tile` на кропе.
+**Важно:** YOLO детектит все тайлы как один класс (86 классов в Roboflow-датасете,
+но `yolo_pipeline.py` использует только координаты, не class_id).
+Классификацию по мастям (wan/pin/tiao/honor + значение) делает `classify_tile` на кропе.

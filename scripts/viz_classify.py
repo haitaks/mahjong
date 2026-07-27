@@ -19,8 +19,8 @@ from PIL import Image, ImageDraw, ImageFont
 from mahjong_layout.io_readers import from_yolo_label
 from mahjong_layout.pipeline import classify_layout
 
-LABELS_DIR = _ROOT / "data" / "valid" / "labels"
-IMAGES_DIR = _ROOT / "data" / "valid" / "images"
+LABELS_DIR = _ROOT / "yolo" / "valid" / "labels"
+IMAGES_DIR = _ROOT / "yolo" / "valid" / "images"
 OUT_DIR = _ROOT / "out" / "viz"
 
 # Цвета зон

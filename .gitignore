@@ -16,9 +16,6 @@ out/
 yolo/model.pt
 yolo/runs/
 
-# Dataset archive
-yolo_dataset.tar.gz
-
 # OS
 .DS_Store
 Thumbs.db

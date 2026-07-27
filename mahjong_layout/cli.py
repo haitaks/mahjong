@@ -75,7 +75,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--viz", action="store_true", help="Render overlay images.")
     parser.add_argument("--quiet", action="store_true", help="Suppress per-photo output.")
 
-    parser.add_argument("--hand-y-min", type=float, default=LayoutParams().hand_y_min)
     parser.add_argument("--eps-k", type=float, default=LayoutParams().eps_k)
     parser.add_argument("--min-samples", type=int, default=LayoutParams().min_samples)
     parser.add_argument(
@@ -90,7 +89,6 @@ def main(argv: Optional[list[str]] = None) -> int:
     params = LayoutParams(
         eps_k=args.eps_k,
         min_samples=args.min_samples,
-        hand_y_min=args.hand_y_min,
         wall_neighbor_eps=args.wall_neighbor_eps,
         wall_min_tiles=args.wall_min_tiles,
     )

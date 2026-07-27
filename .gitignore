@@ -1,20 +1,24 @@
 # Python
 __pycache__/
-*.py[cod]
+*.pyc
+*.pyo
 *.egg-info/
-.venv/
-.venv/
-venv/
-ENV/
-env/
 
-# YOLO dataset zip
-*.zip
+# Virtual environments
+.venv/
+.venv_*/
+venv/
+
+# Output
+out/
+
+# Training artifacts (generated on target machine)
+yolo/model.pt
+yolo/runs/
+
+# Dataset archive
+yolo_dataset.tar.gz
 
 # OS
 .DS_Store
 Thumbs.db
-
-# IDE
-.vscode/
-.idea/

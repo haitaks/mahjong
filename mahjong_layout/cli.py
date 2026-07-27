@@ -6,7 +6,7 @@ summary, and optionally dump JSON and rendered overlay images.
 Examples
 --------
     # Just print a summary line per photo:
-    mahjong-layout Mahjong_YOLO.v2i.yolo26/valid/labels
+    mahjong-layout valid/labels
 
     # Also write JSON + overlay JPEGs over matching photos:
     mahjong-layout valid/labels --images-dir ../images --out out --json --viz

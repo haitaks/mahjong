@@ -69,7 +69,7 @@ result = cluster_layout(boxes, params=params)
 
 ```bash
 # Сводка по каждому фото (читает .txt label-файлы YOLO):
-mahjong-layout Mahjong_YOLO.v2i.yolo26/valid/labels
+mahjong-layout valid/labels
 
 # Полный прогон: JSON + отрисовка поверх фото:
 mahjong-layout valid/labels \
@@ -184,7 +184,7 @@ python scripts/classify_photo.py --tile photo.jpg --box "0.5 0.85 0.06 0.08" --d
 
 ### Честное состояние
 
-Smoke-тест на реальных кропах датасета (`Mahjong_YOLO.v2i.yolo26`) показал:
+Smoke-тест на реальных кропах датасета показал:
 
 - **Синтетика (вкл. цветовые тайлы)**: 92/92 теста зелёные. Цветовой путь
   точно считает цветные точки (pin3→3, pin5→5, pin9→9 на синтетике).
